@@ -1,0 +1,314 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ===== 後台管理員 =====
+
+model User {
+  id        String   @id @default(cuid())
+  username  String   @unique
+  password  String
+  name      String
+  role      UserRole @default(FLOOR_ADMIN)
+  building  String?
+  floor     Int?
+  isActive  Boolean  @default(true)
+  loginAttempts Int  @default(0)
+  lockedUntil   DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  FLOOR_ADMIN
+  NURSE
+}
+
+// ===== 入住預約登記 =====
+
+model Applicant {
+  id             String          @id @default(cuid())
+  applicantName  String
+  contactPhone   String
+  lineUserId     String
+  relation       String
+  status         AdmissionStatus @default(NEW)
+  preferredRoom  RoomType
+  expectedDate   DateTime?
+  privacyConsent Boolean         @default(false)
+  contactNotes   String?
+  referralSource String?
+  residentId     String?         @unique // 入住成功後關聯到 Resident
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  seniorAssessment SeniorAssessment?
+  resident         Resident?       @relation(fields: [residentId], references: [id])
+
+  @@index([lineUserId])
+  @@index([status])
+  @@map("applicants")
+}
+
+model SeniorAssessment {
+  id          String    @id @default(cuid())
+  applicantId String    @unique
+  seniorName  String
+  birthYear   Int
+  gender      Gender
+  adlScore    Int?
+  adlLevel    AdlLevel
+  medicalTags String[]  // 儲存為字串陣列
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  applicant Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+
+  @@map("senior_assessments")
+}
+
+enum AdmissionStatus {
+  NEW          // 新申請
+  CONTACTED    // 已聯繫
+  WAITLISTED   // 候補中
+  ADMITTED     // 安排入住
+  CLOSED       // 結案
+  INELIGIBLE   // 不符合入住資格
+}
+
+enum RoomType {
+  SINGLE
+  DOUBLE
+  SHARED
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum AdlLevel {
+  INDEPENDENT
+  PARTIAL_ASSIST
+  FULLY_DEPENDENT
+}
+
+// ===== 長者與家屬 =====
+
+model Resident {
+  id       String @id @default(cuid())
+  name     String
+  building String
+  floor    Int
+  roomNo   String?
+  idNumber String? // 加密儲存
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  applicant     Applicant?
+  familyMembers FamilyMember[]
+  appointments  Appointment[]
+  reservations  Reservation[]
+  contracts     ContractTransaction[]
+
+  @@index([building, floor])
+  @@map("residents")
+}
+
+model FamilyMember {
+  id               String  @id @default(cuid())
+  residentId       String
+  lineUserId       String
+  name             String
+  relation         String
+  isPrimaryContact Boolean @default(false)
+  isVerified       Boolean @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  resident  Resident @relation(fields: [residentId], references: [id], onDelete: Cascade)
+  responses AppointmentResponse[]
+  contracts ContractTransaction[]
+
+  @@unique([residentId, lineUserId])
+  @@index([lineUserId])
+  @@map("family_members")
+}
+
+// ===== 就診通知與回覆 =====
+
+model Appointment {
+  id         String            @id @default(cuid())
+  residentId String
+  apptDate   DateTime
+  apptTime   String
+  hospital   String
+  department String
+  status     AppointmentStatus @default(PENDING)
+  isUrgent   Boolean           @default(false)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  resident Resident             @relation(fields: [residentId], references: [id])
+  response AppointmentResponse?
+  notifications AppointmentNotification[]
+
+  @@index([apptDate])
+  @@index([residentId])
+  @@map("appointments")
+}
+
+model AppointmentResponse {
+  id                String            @id @default(cuid())
+  appointmentId     String            @unique
+  familyMemberId    String
+  responseSelection ResponseSelection
+  needsTransport    Boolean           @default(false)
+  vehicleType       String?
+  vehicleArrangedAt DateTime?
+  responseTime      DateTime          @default(now())
+
+  appointment  Appointment  @relation(fields: [appointmentId], references: [id])
+  familyMember FamilyMember @relation(fields: [familyMemberId], references: [id])
+
+  @@map("appointment_responses")
+}
+
+model AppointmentNotification {
+  id            String   @id @default(cuid())
+  appointmentId String
+  daysBefore    Int      // 7, 3, 1
+  sentAt        DateTime @default(now())
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id])
+
+  @@unique([appointmentId, daysBefore])
+  @@map("appointment_notifications")
+}
+
+enum AppointmentStatus {
+  PENDING    // 未通知
+  NOTIFIED   // 已通知
+  CONFIRMED  // 已確認
+  CANCELLED  // 已取消
+}
+
+enum ResponseSelection {
+  SELF_ACCOMPANY   // 家屬親自陪同
+  NEED_ASSISTANCE  // 需機構協助
+}
+
+// ===== 家屬探訪預約 =====
+
+model Zone {
+  id                 String  @id @default(cuid())
+  building           String
+  floor              Int
+  label              String
+  maxVisitorsPerSlot Int     @default(10)
+  isActive           Boolean @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  timeSlots    TimeSlot[]
+  reservations Reservation[]
+
+  @@unique([building, floor])
+  @@map("zones")
+}
+
+model TimeSlot {
+  id        String  @id @default(cuid())
+  zoneId    String
+  startTime String  // "10:00"
+  endTime   String  // "11:00"
+  isActive  Boolean @default(true)
+
+  zone         Zone          @relation(fields: [zoneId], references: [id])
+  reservations Reservation[]
+
+  @@map("time_slots")
+}
+
+model Reservation {
+  id          String    @id @default(cuid())
+  zoneId      String
+  timeSlotId  String
+  residentId  String
+  visitDate   DateTime
+  visitorName String
+  lineUserId  String
+  guestCount  Int       @default(1)
+  checkedIn   Boolean   @default(false)
+  noShow      Boolean   @default(false)
+  cancelledAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  zone       Zone       @relation(fields: [zoneId], references: [id])
+  timeSlot   TimeSlot   @relation(fields: [timeSlotId], references: [id])
+  resident   Resident   @relation(fields: [residentId], references: [id])
+
+  @@index([visitDate, zoneId, timeSlotId])
+  @@index([lineUserId, visitDate])
+  @@map("reservations")
+}
+
+// ===== 線上合約簽署 =====
+
+model ContractTemplate {
+  id          String   @id @default(cuid())
+  title       String
+  contentHtml String
+  version     String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  transactions ContractTransaction[]
+
+  @@map("contract_templates")
+}
+
+model ContractTransaction {
+  id                 String         @id @default(cuid())
+  contractTemplateId String
+  residentId         String
+  familyMemberId     String
+  token              String         @unique @default(cuid())
+  signerName         String
+  signerIp           String?
+  signedAt           DateTime?
+  status             ContractStatus @default(PENDING)
+  signatureData      String?        // Base64
+  pdfPath            String?
+  kycVerified        Boolean        @default(false)
+  kycAttempts        Int            @default(0)
+  kycLockedAt        DateTime?
+  expiresAt          DateTime
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  contractTemplate ContractTemplate @relation(fields: [contractTemplateId], references: [id], onDelete: Restrict)
+  resident         Resident         @relation(fields: [residentId], references: [id], onDelete: Restrict)
+  familyMember     FamilyMember     @relation(fields: [familyMemberId], references: [id], onDelete: Restrict)
+
+  @@index([token])
+  @@index([status])
+  @@index([expiresAt])
+  @@map("contract_transactions")
+}
+
+enum ContractStatus {
+  PENDING    // 待簽署
+  COMPLETED  // 已完成
+  EXPIRED    // 過期
+}

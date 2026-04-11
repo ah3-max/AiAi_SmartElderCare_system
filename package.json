@@ -1,0 +1,24 @@
+{
+  "name": "careflow",
+  "version": "1.0.0",
+  "private": true,
+  "description": "愛愛院智慧長照流程數位化系統",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev --workspace=apps/api",
+    "dev:web": "npm run dev --workspace=apps/web",
+    "dev:liff": "npm run dev --workspace=apps/liff",
+    "build:api": "npm run build --workspace=apps/api",
+    "build:web": "npm run build --workspace=apps/web",
+    "build:liff": "npm run build --workspace=apps/liff",
+    "db:generate": "npx prisma generate --schema=prisma/schema.prisma",
+    "db:migrate": "npx prisma migrate dev --schema=prisma/schema.prisma",
+    "db:push": "npx prisma db push --schema=prisma/schema.prisma"
+  },
+  "devDependencies": {
+    "jiti": "^2.6.1"
+  }
+}
