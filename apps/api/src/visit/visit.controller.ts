@@ -29,6 +29,11 @@ class UpdateCapacityDto {
 export class VisitPublicController {
   constructor(private readonly visitService: VisitService) {}
 
+  @Get('residents')
+  getResidents(@Query('lineUserId') lineUserId: string) {
+    return this.visitService.getResidentsByLineUserId(lineUserId);
+  }
+
   @Get('slots')
   getAvailableSlots(
     @Query('zoneId') zoneId: string,

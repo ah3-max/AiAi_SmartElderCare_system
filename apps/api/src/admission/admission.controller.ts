@@ -32,6 +32,19 @@ class UpdateStatusDto {
   @IsOptional() @IsString() expectedDate?: string;
 }
 
+class AdmitDto {
+  @IsString() building: string;
+  @IsInt() floor: number;
+  @IsString() roomNo: string;
+  @IsOptional() @IsString() idNumber?: string;
+}
+
+class CreateContactRecordDto {
+  @IsString() contactedBy: string;
+  @IsString() contactType: string; // phone / visit / line
+  @IsString() notes: string;
+}
+
 // 公開端點（LIFF 使用，不需要 JWT）
 @Controller('admissions')
 export class AdmissionPublicController {
@@ -82,5 +95,20 @@ export class AdmissionAdminController {
   @Patch(':id/status')
   updateStatus(@Param('id') id: string, @Body() dto: UpdateStatusDto) {
     return this.admissionService.updateStatus(id, dto);
+  }
+
+  @Post(':id/admit')
+  admit(@Param('id') id: string, @Body() dto: AdmitDto) {
+    return this.admissionService.admit(id, dto);
+  }
+
+  @Post(':id/contacts')
+  addContactRecord(@Param('id') id: string, @Body() dto: CreateContactRecordDto) {
+    return this.admissionService.addContactRecord(id, dto);
+  }
+
+  @Get(':id/contacts')
+  getContactRecords(@Param('id') id: string) {
+    return this.admissionService.getContactRecords(id);
   }
 }

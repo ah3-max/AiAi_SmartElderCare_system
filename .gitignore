@@ -5,6 +5,9 @@ dist/
 .env.local
 .env.production
 *.log
+logs/
+*.tsbuildinfo
 .DS_Store
 coverage/
 .turbo/
+certs/

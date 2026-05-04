@@ -72,6 +72,10 @@ export class AuthService {
 
     return {
       access_token: this.jwtService.sign(payload),
+      refresh_token: this.jwtService.sign(
+        { sub: user.id, type: 'refresh' },
+        { expiresIn: '30d' },
+      ),
       user: {
         id: user.id,
         name: user.name,
@@ -80,6 +84,35 @@ export class AuthService {
         building: user.building,
         floor: user.floor,
       },
+    };
+  }
+
+  /** 用 refresh token 換發新的 access token */
+  async refresh(refreshToken: string) {
+    let decoded: any;
+    try {
+      decoded = this.jwtService.verify(refreshToken);
+    } catch {
+      throw new UnauthorizedException('refresh token 無效或已過期');
+    }
+    if (decoded.type !== 'refresh') {
+      throw new UnauthorizedException('token 類型錯誤');
+    }
+
+    const user = await this.prisma.user.findUnique({ where: { id: decoded.sub } });
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('帳號已停用');
+    }
+
+    const payload = {
+      sub: user.id,
+      username: user.username,
+      role: user.role,
+      building: user.building,
+      floor: user.floor,
+    };
+    return {
+      access_token: this.jwtService.sign(payload),
     };
   }
 }

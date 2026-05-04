@@ -54,6 +54,11 @@ export class AppointmentAdminController {
     return this.appointmentService.findAll({ building, status, date, page, pageSize });
   }
 
+  @Get('residents')
+  listResidents(@Query('building') building?: string) {
+    return this.appointmentService.listResidents(building);
+  }
+
   @Post()
   create(@Body() dto: CreateAppointmentDto) {
     return this.appointmentService.create(dto);

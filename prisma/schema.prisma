@@ -51,10 +51,25 @@ model Applicant {
 
   seniorAssessment SeniorAssessment?
   resident         Resident?       @relation(fields: [residentId], references: [id])
+  contactRecords   ContactRecord[]
 
   @@index([lineUserId])
   @@index([status])
   @@map("applicants")
+}
+
+model ContactRecord {
+  id          String   @id @default(cuid())
+  applicantId String
+  contactedBy String   // 聯繫人員姓名
+  contactType String   // phone / visit / line
+  notes       String   // 訪談/聯繫內容
+  createdAt   DateTime @default(now())
+
+  applicant Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+
+  @@index([applicantId])
+  @@map("contact_records")
 }
 
 model SeniorAssessment {

@@ -18,6 +18,34 @@ export class VisitService {
     private readonly notification: NotificationService,
   ) {}
 
+  // 查詢家屬綁定的長者清單（LIFF 探訪預約用）
+  async getResidentsByLineUserId(lineUserId: string) {
+    const familyMembers = await this.prisma.familyMember.findMany({
+      where: { lineUserId, isVerified: true },
+      include: { resident: true },
+    });
+
+    // 附帶長者所在 zone 以便 LIFF 直接查詢時段
+    const results = await Promise.all(
+      familyMembers.map(async (fm) => {
+        const zone = await this.prisma.zone.findFirst({
+          where: { building: fm.resident.building, floor: fm.resident.floor, isActive: true },
+        });
+        return {
+          residentId: fm.resident.id,
+          residentName: fm.resident.name,
+          building: fm.resident.building,
+          floor: fm.resident.floor,
+          relation: fm.relation,
+          zoneId: zone?.id ?? null,
+          zoneLabel: zone?.label ?? null,
+          maxVisitorsPerSlot: zone?.maxVisitorsPerSlot ?? null,
+        };
+      }),
+    );
+    return results;
+  }
+
   // 查詢可預約時段（附剩餘名額）— 單次查詢避免 N+1
   async getAvailableSlots(zoneId: string, date: string) {
     const zone = await this.prisma.zone.findUnique({
@@ -102,7 +130,7 @@ export class VisitService {
     }
 
     // Transaction 原子性名額檢查 + 建立預約
-    return this.prisma.$transaction(async (tx) => {
+    const reservation = await this.prisma.$transaction(async (tx) => {
       const booked = await tx.reservation.aggregate({
         where: {
           timeSlotId: dto.timeSlotId,
@@ -120,7 +148,7 @@ export class VisitService {
         throw new ConflictException('該時段名額已滿，請選擇其他時段');
       }
 
-      const reservation = await tx.reservation.create({
+      return tx.reservation.create({
         data: {
           ...dto,
           visitDate,
@@ -131,9 +159,21 @@ export class VisitService {
           resident: true,
         },
       });
-
-      return reservation;
     });
+
+    // 推播預約成功通知給家屬
+    await this.notification.pushToUser(dto.lineUserId, [
+      this.notification.buildVisitConfirmMessage({
+        visitDate: dto.visitDate,
+        startTime: reservation.timeSlot.startTime,
+        endTime: reservation.timeSlot.endTime,
+        residentName: reservation.resident.name,
+        building: reservation.zone.building,
+        floor: reservation.zone.floor,
+      }),
+    ]);
+
+    return reservation;
   }
 
   async cancel(id: string, lineUserId: string) {

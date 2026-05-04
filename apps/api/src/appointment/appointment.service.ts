@@ -36,15 +36,28 @@ export class AppointmentService {
         targetDate.setDate(today.getDate() + daysBefore);
         const dateStr = targetDate.toISOString().split('T')[0];
 
+        // 排除當日有急診請假記錄的長者
+        const dayStart = new Date(`${dateStr}T00:00:00`);
+        const dayEnd = new Date(`${dateStr}T23:59:59.999`);
+        const emergencyLeaves = await this.prisma.residentLeave.findMany({
+          where: {
+            leaveType: 'EMERGENCY',
+            startDate: { lte: dayEnd },
+            endDate: { gte: dayStart },
+          },
+          select: { residentId: true },
+        });
+        const excludedResidentIds = emergencyLeaves.map((l) => l.residentId);
+
         const appointments = await this.prisma.appointment.findMany({
           where: {
-            apptDate: {
-              gte: new Date(`${dateStr}T00:00:00`),
-              lt: new Date(`${dateStr}T00:00:00`.replace(/T.*/, 'T23:59:59.999')),
-            },
+            apptDate: { gte: dayStart, lt: dayEnd },
             status: { not: 'CANCELLED' },
             isUrgent: false,
             notifications: { none: { daysBefore } },
+            residentId: excludedResidentIds.length
+              ? { notIn: excludedResidentIds }
+              : undefined,
           },
           include: {
             resident: { include: { familyMembers: true } },
@@ -158,6 +171,15 @@ export class AppointmentService {
       data: { status: 'CONFIRMED' },
     });
 
+    // 推播確認訊息給家屬
+    const selectionLabel = params.responseSelection === 'SELF_ACCOMPANY' ? '家屬親自陪同' : '需機構協助';
+    await this.notification.pushToUser(params.lineUserId, [
+      {
+        type: 'text',
+        text: `您已確認 ${appt.resident.name} 於 ${appt.apptDate.toLocaleDateString('zh-TW')} ${appt.apptTime} 的就診安排：${selectionLabel}。${params.responseSelection === 'SELF_ACCOMPANY' ? '我們將於就診前一天再次提醒您。' : '機構將盡快安排交通，請留意後續通知。'}`,
+      },
+    ]);
+
     // 若需機構協助，通知行政人員
     if (params.responseSelection === 'NEED_ASSISTANCE') {
       await this.notification.notifyAdmin(
@@ -268,6 +290,17 @@ export class AppointmentService {
         apptDate: new Date(data.apptDate),
       },
       include: { resident: true },
+    });
+  }
+
+  // 列出所有長者（供後台新增就診時選擇）
+  async listResidents(building?: string) {
+    const where: any = {};
+    if (building) where.building = building;
+    return this.prisma.resident.findMany({
+      where,
+      select: { id: true, name: true, building: true, floor: true, roomNo: true },
+      orderBy: [{ building: 'asc' }, { floor: 'asc' }, { roomNo: 'asc' }],
     });
   }
 }

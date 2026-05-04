@@ -51,10 +51,25 @@ model Applicant {
 
   seniorAssessment SeniorAssessment?
   resident         Resident?       @relation(fields: [residentId], references: [id])
+  contactRecords   ContactRecord[]
 
   @@index([lineUserId])
   @@index([status])
   @@map("applicants")
+}
+
+model ContactRecord {
+  id          String   @id @default(cuid())
+  applicantId String
+  contactedBy String   // 聯繫人員姓名
+  contactType String   // phone / visit / line
+  notes       String   // 訪談/聯繫內容
+  createdAt   DateTime @default(now())
+
+  applicant Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+
+  @@index([applicantId])
+  @@map("contact_records")
 }
 
 model SeniorAssessment {
@@ -311,4 +326,45 @@ enum ContractStatus {
   PENDING    // 待簽署
   COMPLETED  // 已完成
   EXPIRED    // 過期
+}
+
+// ===== 長者請假（含急診記錄，用於排除就診通知發送） =====
+
+model ResidentLeave {
+  id         String      @id @default(cuid())
+  residentId String
+  startDate  DateTime
+  endDate    DateTime
+  reason     String      // 請假原因文字
+  leaveType  LeaveType   @default(OTHER)
+  notes      String?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  @@index([residentId, startDate, endDate])
+  @@index([leaveType])
+  @@map("resident_leaves")
+}
+
+enum LeaveType {
+  EMERGENCY   // 急診（就診通知排除依據）
+  PERSONAL    // 個人事假
+  FAMILY      // 家庭事由
+  OTHER
+}
+
+// ===== Line Bot FAQ 知識庫 =====
+
+model FaqEntry {
+  id        String   @id @default(cuid())
+  keyword   String   @unique  // 比對關鍵字（例如「收費」）
+  question  String             // 顯示用問題
+  answer    String             // 回覆內容
+  priority  Int      @default(0)  // 優先度（比對順序）
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, priority])
+  @@map("faq_entries")
 }
