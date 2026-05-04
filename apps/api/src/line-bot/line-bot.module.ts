@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
 import { LineBotService } from './line-bot.service';
-import { LineBotController, FaqAdminController } from './line-bot.controller';
+import { LineBotController } from './line-bot.controller';
 
 @Module({
   providers: [LineBotService],
-  controllers: [LineBotController, FaqAdminController],
+  controllers: [LineBotController],
   exports: [LineBotService],
 })
 export class LineBotModule {}

@@ -76,8 +76,9 @@ export class AppointmentService {
               if (!response || response.responseSelection !== 'SELF_ACCOMPANY') continue;
             }
 
+            // 推播不要求 isVerified，isVerified 只用於驗證 LIFF 回覆頁面的開啟權限
             const primaryContact = appt.resident.familyMembers.find(
-              (fm) => fm.isPrimaryContact && fm.isVerified,
+              (fm) => fm.isPrimaryContact,
             );
             if (!primaryContact) continue;
 

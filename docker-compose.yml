@@ -60,6 +60,9 @@ services:
     build:
       context: .
       dockerfile: apps/liff/Dockerfile
+      args:
+        VITE_LIFF_ID: "${VITE_LIFF_ID:-}"
+        VITE_API_URL: "${VITE_API_URL:-}"
     container_name: careflow_liff
     ports:
       - "5173:80"

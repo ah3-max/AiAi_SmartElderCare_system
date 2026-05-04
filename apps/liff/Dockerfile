@@ -10,6 +10,10 @@ RUN npm ci --workspace=apps/liff --workspace=packages/shared --include-workspace
 
 # Build
 FROM base AS builder
+ARG VITE_LIFF_ID
+ARG VITE_API_URL
+ENV VITE_LIFF_ID=$VITE_LIFF_ID
+ENV VITE_API_URL=$VITE_API_URL
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 WORKDIR /app/apps/liff
