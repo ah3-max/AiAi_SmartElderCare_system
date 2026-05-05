@@ -2,10 +2,25 @@ import liff from '@line/liff'
 
 let initialized = false
 
+const LIFF_ID_MAP: Record<string, string> = {
+  '/liff/admission':   import.meta.env.VITE_LIFF_ID_ADMISSION   ?? '',
+  '/liff/appointment': import.meta.env.VITE_LIFF_ID_APPOINTMENT ?? '',
+  '/liff/visit':       import.meta.env.VITE_LIFF_ID_VISIT       ?? '',
+  '/liff/contract':    import.meta.env.VITE_LIFF_ID_CONTRACT     ?? '',
+}
+
+function detectLiffId(): string {
+  const path = window.location.pathname
+  for (const [prefix, id] of Object.entries(LIFF_ID_MAP)) {
+    if (path.startsWith(prefix)) return id
+  }
+  return ''
+}
+
 export async function initLiff(): Promise<void> {
-  const liffId = import.meta.env.VITE_LIFF_ID
+  const liffId = detectLiffId()
   if (!liffId) {
-    console.warn('[LIFF] VITE_LIFF_ID 未設定，跳過 LIFF 初始化')
+    console.warn('[LIFF] 無法從路徑判斷 LIFF ID，跳過初始化')
     return
   }
   try {

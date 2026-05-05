@@ -119,12 +119,12 @@ else
   fi
   echo ""
 
-  # ── 更新 LIFF URL（4 個全指向同一 base URL，由 liffId 區分頁面）─────
+  # ── 更新 LIFF URL（各指向對應路徑）──────────────────────────────
   echo "▶ 更新 LIFF URL..."
-  [ -n "$LIFF_ID_ADMISSION" ]   && update_liff_url "$LIFF_ID_ADMISSION"   "$LIFF_URL"
-  [ -n "$LIFF_ID_APPOINTMENT" ] && update_liff_url "$LIFF_ID_APPOINTMENT" "$LIFF_URL"
-  [ -n "$LIFF_ID_VISIT" ]       && update_liff_url "$LIFF_ID_VISIT"       "$LIFF_URL"
-  [ -n "$LIFF_ID_CONTRACT" ]    && update_liff_url "$LIFF_ID_CONTRACT"    "$LIFF_URL"
+  [ -n "$LIFF_ID_ADMISSION" ]   && update_liff_url "$LIFF_ID_ADMISSION"   "$LIFF_URL/liff/admission"
+  [ -n "$LIFF_ID_APPOINTMENT" ] && update_liff_url "$LIFF_ID_APPOINTMENT" "$LIFF_URL/liff/appointment"
+  [ -n "$LIFF_ID_VISIT" ]       && update_liff_url "$LIFF_ID_VISIT"       "$LIFF_URL/liff/visit"
+  [ -n "$LIFF_ID_CONTRACT" ]    && update_liff_url "$LIFF_ID_CONTRACT"    "$LIFF_URL/liff/contract"
 
   LIFF_SET=0
   [ -n "$LIFF_ID_ADMISSION" ]   && LIFF_SET=1
