@@ -34,7 +34,9 @@ export class LineBotController {
         signature ?? '',
       );
       if (!isValid) {
-        this.logger.warn('Line Webhook 簽名驗證失敗');
+        this.logger.warn(
+          `Line Webhook 簽名驗證失敗 | secret前4碼=${this.channelSecret.slice(0,4)} | sig=${(signature??'').slice(0,20)} | bodyLen=${rawBody.length}`,
+        );
         throw new ForbiddenException('Invalid signature');
       }
     }

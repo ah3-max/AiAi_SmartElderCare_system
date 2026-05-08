@@ -47,14 +47,15 @@ wait_for_url() {
 }
 
 # ── 更新單一 LIFF 端點 ──────────────────────────────────────────
-update_liff_url() {
+update_liff_url_with_token() {
   local liff_id=$1
   local full_url=$2
+  local token=$3
   local resp
 
   resp=$(curl -s -o /tmp/liff_resp.json -w "%{http_code}" \
     -X PUT "https://api.line.me/liff/v1/apps/$liff_id" \
-    -H "Authorization: Bearer $LINE_CHANNEL_ACCESS_TOKEN" \
+    -H "Authorization: Bearer $token" \
     -H "Content-Type: application/json" \
     -d "{\"view\": {\"url\": \"$full_url\"}}")
 
@@ -119,19 +120,25 @@ else
   fi
   echo ""
 
-  # ── 更新 LIFF URL（各指向對應路徑）──────────────────────────────
+  # ── 取得 LIFF Login Channel token ────────────────────────────────
   echo "▶ 更新 LIFF URL..."
-  [ -n "$LIFF_ID_ADMISSION" ]   && update_liff_url "$LIFF_ID_ADMISSION"   "$LIFF_URL/liff/admission"
-  [ -n "$LIFF_ID_APPOINTMENT" ] && update_liff_url "$LIFF_ID_APPOINTMENT" "$LIFF_URL/liff/appointment"
-  [ -n "$LIFF_ID_VISIT" ]       && update_liff_url "$LIFF_ID_VISIT"       "$LIFF_URL/liff/visit"
-  [ -n "$LIFF_ID_CONTRACT" ]    && update_liff_url "$LIFF_ID_CONTRACT"    "$LIFF_URL/liff/contract"
+  if [ -z "$LIFF_CHANNEL_ID" ] || [ -z "$LIFF_CHANNEL_SECRET" ]; then
+    echo -e "  ${YELLOW}⚠ LIFF_CHANNEL_ID / LIFF_CHANNEL_SECRET 未設定，略過 LIFF 更新${NC}"
+  else
+    LIFF_TOKEN=$(curl -s -X POST "https://api.line.me/oauth2/v3/token" \
+      -H "Content-Type: application/x-www-form-urlencoded" \
+      -d "grant_type=client_credentials&client_id=$LIFF_CHANNEL_ID&client_secret=$LIFF_CHANNEL_SECRET" \
+      | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))" 2>/dev/null)
 
-  LIFF_SET=0
-  [ -n "$LIFF_ID_ADMISSION" ]   && LIFF_SET=1
-  [ -n "$LIFF_ID_APPOINTMENT" ] && LIFF_SET=1
-  [ -n "$LIFF_ID_VISIT" ]       && LIFF_SET=1
-  [ -n "$LIFF_ID_CONTRACT" ]    && LIFF_SET=1
-  [ "$LIFF_SET" = "0" ] && echo -e "  ${YELLOW}⚠ LIFF_ID_* 未設定，略過 LIFF 更新${NC}"
+    if [ -z "$LIFF_TOKEN" ]; then
+      echo -e "  ${RED}✗ 無法取得 LIFF channel token，略過 LIFF 更新${NC}"
+    else
+      [ -n "$LIFF_ID_ADMISSION" ]   && update_liff_url_with_token "$LIFF_ID_ADMISSION"   "$LIFF_URL/liff/admission"   "$LIFF_TOKEN"
+      [ -n "$LIFF_ID_APPOINTMENT" ] && update_liff_url_with_token "$LIFF_ID_APPOINTMENT" "$LIFF_URL/liff/appointment" "$LIFF_TOKEN"
+      [ -n "$LIFF_ID_VISIT" ]       && update_liff_url_with_token "$LIFF_ID_VISIT"       "$LIFF_URL/liff/visit"       "$LIFF_TOKEN"
+      [ -n "$LIFF_ID_CONTRACT" ]    && update_liff_url_with_token "$LIFF_ID_CONTRACT"    "$LIFF_URL/liff/contract"    "$LIFF_TOKEN"
+    fi
+  fi
   echo ""
 fi
 
