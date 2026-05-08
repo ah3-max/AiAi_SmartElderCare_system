@@ -16,6 +16,7 @@ import { ContractModule } from './contract/contract.module';
 import { LineBotModule } from './line-bot/line-bot.module';
 import { CryptoModule } from './common/crypto/crypto.module';
 import { FaqModule } from './faq/faq.module';
+import { ResidentLeaveModule } from './resident-leave/resident-leave.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { FaqModule } from './faq/faq.module';
     ContractModule,
     LineBotModule,
     FaqModule,
+    ResidentLeaveModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
