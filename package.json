@@ -14,9 +14,9 @@
     "build:api": "npm run build --workspace=apps/api",
     "build:web": "npm run build --workspace=apps/web",
     "build:liff": "npm run build --workspace=apps/liff",
-    "db:generate": "npx prisma generate --schema=prisma/schema.prisma",
-    "db:migrate": "npx prisma migrate dev --schema=prisma/schema.prisma",
-    "db:push": "npx prisma db push --schema=prisma/schema.prisma"
+    "db:generate": "npx prisma generate --schema=apps/api/prisma/schema.prisma",
+    "db:migrate": "npx prisma migrate dev --schema=apps/api/prisma/schema.prisma",
+    "db:push": "npx prisma db push --schema=apps/api/prisma/schema.prisma"
   },
   "devDependencies": {
     "jiti": "^2.6.1"
