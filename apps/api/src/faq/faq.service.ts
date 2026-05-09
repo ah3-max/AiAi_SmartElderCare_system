@@ -6,6 +6,7 @@ export interface CreateFaqDto {
   question: string;
   answer: string;
   priority?: number;
+  isActive?: boolean;
 }
 
 export interface UpdateFaqDto {
