@@ -106,6 +106,7 @@ AiAi_SmartElderCare_system/
 | 看板元件 | @hello-pangea/dnd（拖拉看板） |
 | 圖表 | Chart.js + react-chartjs-2 |
 | 表格 | Ant Design Table（分頁、篩選、排序） |
+| 富文本編輯器 | react-quill-new（合約範本 WYSIWYG 編輯） |
 
 ### 2.5 LIFF 家屬端技術規格
 
@@ -161,7 +162,7 @@ AiAi_SmartElderCare_system/
 - `Reservation`：預約紀錄（含報到狀態）
 
 **合約簽署：**
-- `ContractTemplate`：合約範本（HTML 格式）
+- `ContractTemplate`：合約範本（HTML 格式 + 可選 pdfFilePath 原檔路徑）
 - `ContractTransaction`：簽署交易紀錄（含 Token、KYC、簽名、PDF）
 
 **其他：**
@@ -180,7 +181,7 @@ AiAi_SmartElderCare_system/
 | AdlLevel | INDEPENDENT, PARTIAL_ASSIST, FULLY_DEPENDENT | ADL 評估等級 |
 | AppointmentStatus | PENDING, NOTIFIED, CONFIRMED, CANCELLED | 就診通知狀態 |
 | ResponseSelection | SELF_ACCOMPANY, NEED_ASSISTANCE | 家屬回覆選項 |
-| ContractStatus | PENDING, COMPLETED, EXPIRED | 合約簽署狀態 |
+| ContractStatus | PENDING, COMPLETED, EXPIRED, REJECTED | 合約簽署狀態 |
 | LeaveType | EMERGENCY, PERSONAL, FAMILY, OTHER | 請假類型 |
 
 ---
@@ -373,10 +374,11 @@ Reservation
 
 #### 4.4.2 合約範本管理
 
-- 儲存格式：HTML（ContentHTML 欄位）
-- 目前不支援直接上傳 PDF 或 Word 檔案
+- 儲存格式：HTML（contentHtml 欄位），可選保存原始檔案路徑（pdfFilePath）
+- **輸入方式一：富文本編輯器**（react-quill-new）— 行政人員在後台直接編輯，所見即所得
+- **輸入方式二：上傳 Word 檔案**（.docx）— 系統透過 mammoth 自動轉換為 HTML，原始 docx 保存備查
 - 後台可新增、編輯、停用合約範本
-- 範本包含：標題、版本號、HTML 內容、啟用狀態
+- 範本包含：標題、版本號、HTML 內容、原始檔案路徑、啟用狀態
 
 #### 4.4.3 合約簽署完整流程
 
@@ -399,7 +401,7 @@ Reservation
 11. 勾選確認框二：「我已閱讀並同意電子簽章使用告知及個人資料蒐集告知」
 12. 在簽名畫布上手寫簽名
 13. 點擊「同意採用電子簽章」
-    （或點擊「拒絕，改用紙本簽署」→ 狀態標為 EXPIRED，通知行政人員）
+    （或點擊「拒絕，改用紙本簽署」→ 狀態標為 REJECTED，通知行政人員準備紙本流程）
 14. 後端產出 PDF（PDFKit）→ 嵌入合約文字 + 簽名圖檔 + 簽署資訊
 15. 呼叫 TWCA API 進行數位簽章 + TSA 時間戳記
 16. 儲存最終 PDF 至檔案系統
@@ -413,8 +415,9 @@ Reservation
 |------|------|------|
 | PENDING + 效期 > 30 天 | 綠色 | 效期內，待簽署 |
 | PENDING + 效期 ≤ 30 天 | 黃色 | 即將到期，應催簽 |
-| EXPIRED 或已過期 | 紅色 | 已過期 |
-| COMPLETED | — | 已完成簽署 |
+| EXPIRED 或已過期 | 紅色 | 自然過期 |
+| REJECTED | 橘色 | 家屬主動拒絕電子簽署，改用紙本 |
+| COMPLETED | 綠色 | 已完成簽署 |
 
 #### 4.4.5 自動排程
 
@@ -473,22 +476,72 @@ Reservation
 - HMAC-SHA256 驗證 TWCA 回呼，防止偽造
 - 簽署前檢查 kycVerified 狀態
 
-#### 4.4.10 法規遵循（電子簽章法）
+#### 4.4.10 法規遵循（電子簽章法 + 個資法）
 
 - 最終 PDF 包含 TWCA 數位憑證與 AATL 國際標準時間戳記
 - LIFF 頁面提供「同意採用電子簽章」與「拒絕，改用紙本簽署」選項
 - 簽署完成後 Token 連結立即失效（One-time Link）
 - 留存數位軌跡：簽署人 IP、時間戳記、交易 ID
 
-#### 4.4.11 後台合約管理 Dashboard
+**電子簽章使用告知（依電子簽章法第 4、5 條）：**
+- 告知電子簽章與紙本具同等法律效力
+- 揭露 TWCA 憑證機構名稱與 AATL 時間戳記規格
+- 明確說明簽署人有權選擇紙本替代方案
+- 說明簽署後將提供 PDF 副本留存
+
+**個人資料蒐集告知（依個資法第 8 條）：**
+- 蒐集目的：合約簽署之身份驗證與法律效力確認（代號 069）
+- 蒐集項目：姓名、簽名圖檔、IP 位址、簽署時間、身份驗證結果
+- 利用期間、地區、對象
+- 當事人權利：查詢、閱覽、複製、更正、停止利用、刪除
+
+**雙重勾選確認（前後端雙重驗證）：**
+- 勾選框一：「我已詳細閱讀上述合約內容」
+- 勾選框二：「我已閱讀並同意電子簽章使用告知及個人資料蒐集告知」
+- 兩個都勾選後才顯示簽名畫布
+- 後端 SubmitSignatureDto 包含 `agreedToElectronic` + `agreedToTerms` 雙重布林驗證，無法繞過前端直接呼叫 API
+
+#### 4.4.11 簽署完成後推播
+
+簽署完成後，系統透過 LINE 推播以下內容給家屬：
+- 合約名稱與版本號
+- 簽署時間
+- PDF 副本下載連結（GET /contracts/pdf/:token，簽署後 30 天內有效）
+- 過期提示文字
+- 機構聯絡電話（02-2758-7020）
+
+LIFF 簽署完成頁面亦提供「下載合約 PDF 副本」按鈕。
+
+#### 4.4.12 後台合約管理 Dashboard
 
 - 統計看板：本月待簽署 / 即將到期 / 已完成
-- 合約列表：含燈號、到期日、簽署日、狀態
-- 多維度篩選：棟別 / 樓層 / 狀態 / 姓名搜尋
+- 合約列表：含燈號（綠/黃/紅/橘）、到期日、簽署日、狀態
+- 多維度篩選：棟別 / 樓層 / 狀態（待簽署/已完成/已拒絕（紙本）/過期）/ 姓名搜尋
 - 批次催簽：勾選多筆待簽署合約重發通知
 - PDF 下載：已完成合約可下載含數位簽章的 PDF
+- **合約範本管理：**
+  - 富文本編輯器（react-quill-new WYSIWYG）新增/編輯範本
+  - Word 上傳按鈕（.docx，mammoth 自動轉 HTML）
+  - 範本啟用/停用/刪除
 
-#### 4.4.12 正式環境必要設定
+#### 4.4.13 RWD 響應式設計（平板與筆電優化）
+
+合約簽署頁面針對平板（員工與家屬現場簽約場景）與筆電做響應式優化：
+
+| 項目 | 手機（< 768px） | 平板（768px+） | 筆電（1024px+） |
+|------|----------------|---------------|----------------|
+| 容器寬度 | max-w-lg (512px) | max-w-2xl (672px) | max-w-4xl (896px) |
+| 簽名畫布高度 | 200px | 300px | 350px |
+| 合約內容區高度 | 320px | 500px | 600px |
+| 告知區塊排版 | 單欄 | 單欄 | 雙欄並排 |
+| 按鈕排版 | 堆疊 | 並排 | 並排 |
+| 字體大小 | text-sm | text-base | text-base |
+| 勾選框大小 | 20px | 24px | 24px |
+
+- 簽名畫布設定 `touch-none` 防止簽名時頁面捲動
+- 筆跡粗細 minWidth 1.5 / maxWidth 3，適合觸控筆與手指
+
+#### 4.4.14 正式環境必要設定
 
 ```env
 TWCA_API_URL=https://api.twca.com.tw
@@ -498,6 +551,7 @@ TWCA_KYC_CALLBACK_URL=https://<正式網域>/contracts/twca-callback
 API_BASE_URL=https://<正式網域>
 LIFF_BASE_URL=https://liff.line.me/<LIFF ID>
 CONTRACT_PDF_DIR=uploads/contracts
+CONTRACT_TEMPLATE_DIR=uploads/templates
 CJK_FONT_PATH=/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf
 ```
 
@@ -600,7 +654,8 @@ CJK_FONT_PATH=/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf
 | POST | /api/contracts/twca-callback | TWCA KYC 回呼 |
 | POST | /api/contracts/sign | 合約簽署（LIFF） |
 | POST | /api/contracts/reject | 拒絕電子簽署（LIFF） |
-| GET | /api/contracts/pdf/:token | 家屬下載已簽署 PDF 副本 |
+| GET | /api/contracts/pdf/:token | 家屬下載已簽署 PDF 副本（30 天有效） |
+| GET | /api/contracts/template-pdf/:templateId | 取得合約範本原始檔案 |
 
 ### 9.2 後台端點（需 JWT 認證）
 
@@ -610,6 +665,7 @@ CJK_FONT_PATH=/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf
 | GET/POST/PATCH | /admin/appointments | 就診通知管理 |
 | GET/POST/PATCH | /admin/visits | 探訪預約管理 |
 | GET/POST | /admin/contracts | 合約管理 |
+| POST | /admin/contracts/templates/upload | 上傳 Word 建立合約範本 |
 | GET | /admin/contracts/:id/pdf | 下載合約 PDF |
 | GET/POST/PATCH/DELETE | /admin/faq | FAQ 管理 |
 | GET/POST/PATCH/DELETE | /admin/users | 使用者管理（限 ADMIN） |
@@ -650,6 +706,7 @@ API_BASE_URL=https://<正式網域>
 
 # PDF
 CONTRACT_PDF_DIR=uploads/contracts
+CONTRACT_TEMPLATE_DIR=uploads/templates
 CJK_FONT_PATH=/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf
 ```
 
@@ -693,12 +750,13 @@ CJK_FONT_PATH=/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf
 | 項目 | 狀態 | 說明 |
 |------|------|------|
 | TWCA 正式憑證 | 待設定 | 目前使用 Stub 模式，正式環境需設定 TWCA_SECRET |
-| 合約範本上傳 | 未實作 | 目前僅支援 HTML，不支援 PDF/Word 上傳 |
 | HTML 清理 | 建議加強 | ContractSign.tsx 使用 dangerouslySetInnerHTML，建議加入 DOMPurify |
 | CJK 字型安裝 | 待確認 | Docker 環境需安裝 fonts-droid-fallback |
-| 合約拒絕狀態 | 建議優化 | 拒絕紙本簽署後狀態標為 EXPIRED，建議新增 REJECTED 狀態 |
-| ~~電子簽章告知書~~ | 已完成 | 已加入電子簽章使用告知 + 個資蒐集告知 + 雙重勾選確認 |
-| ~~簽署後 PDF 副本~~ | 已完成 | 簽署完成後推播 PDF 下載連結給家屬，LIFF 頁面亦提供下載按鈕 |
+| ~~電子簽章告知書~~ | 已完成 | 電子簽章使用告知 + 個資蒐集告知 + 雙重勾選 + 後端 agreedToTerms 驗證 |
+| ~~簽署後 PDF 副本~~ | 已完成 | 推播含版本號/下載連結/30天期限/聯絡電話，LIFF 亦提供下載按鈕 |
+| ~~合約範本上傳~~ | 已完成 | 富文本編輯器（react-quill-new）+ Word 上傳（mammoth 轉 HTML） |
+| ~~合約拒絕狀態~~ | 已完成 | 新增 REJECTED 狀態，後台橘色燈號，篩選下拉新增選項 |
+| ~~平板/筆電 RWD~~ | 已完成 | 簽署頁面響應式優化：容器/簽名區/告知區塊/按鈕/字體依裝置適配 |
 
 ---
 
