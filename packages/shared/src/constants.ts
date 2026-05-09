@@ -1,64 +1,64 @@
 // ===== 入住預約狀態 =====
 export const ADMISSION_STATUS = {
-  NEW: 'new',              // 新申請
-  CONTACTED: 'contacted',  // 已聯繫
-  WAITLISTED: 'waitlisted', // 候補中
-  ADMITTED: 'admitted',    // 安排入住
-  CLOSED: 'closed',        // 結案
-  INELIGIBLE: 'ineligible', // 不符合入住資格
+  NEW: 'NEW',              // 新申請
+  CONTACTED: 'CONTACTED',  // 已聯繫
+  WAITLISTED: 'WAITLISTED', // 候補中
+  ADMITTED: 'ADMITTED',    // 安排入住
+  CLOSED: 'CLOSED',        // 結案
+  INELIGIBLE: 'INELIGIBLE', // 不符合入住資格
 } as const;
 
 export type AdmissionStatus = (typeof ADMISSION_STATUS)[keyof typeof ADMISSION_STATUS];
 
 // ===== 就診通知狀態 =====
 export const APPOINTMENT_STATUS = {
-  PENDING: 'pending',      // 未通知
-  NOTIFIED: 'notified',    // 已通知
-  CONFIRMED: 'confirmed',  // 已確認
-  CANCELLED: 'cancelled',  // 已取消
+  PENDING: 'PENDING',      // 未通知
+  NOTIFIED: 'NOTIFIED',    // 已通知
+  CONFIRMED: 'CONFIRMED',  // 已確認
+  CANCELLED: 'CANCELLED',  // 已取消
 } as const;
 
 export type AppointmentStatus = (typeof APPOINTMENT_STATUS)[keyof typeof APPOINTMENT_STATUS];
 
 // ===== 家屬回覆選項 =====
 export const RESPONSE_SELECTION = {
-  SELF_ACCOMPANY: 'self_accompany',     // 家屬親自陪同
-  NEED_ASSISTANCE: 'need_assistance',   // 需機構協助
+  SELF_ACCOMPANY: 'SELF_ACCOMPANY',     // 家屬親自陪同
+  NEED_ASSISTANCE: 'NEED_ASSISTANCE',   // 需機構協助
 } as const;
 
 export type ResponseSelection = (typeof RESPONSE_SELECTION)[keyof typeof RESPONSE_SELECTION];
 
 // ===== 合約簽署狀態 =====
 export const CONTRACT_STATUS = {
-  PENDING: 'pending',      // 待簽署
-  COMPLETED: 'completed',  // 已完成
-  EXPIRED: 'expired',      // 過期
+  PENDING: 'PENDING',      // 待簽署
+  COMPLETED: 'COMPLETED',  // 已完成
+  EXPIRED: 'EXPIRED',      // 過期
 } as const;
 
 export type ContractStatus = (typeof CONTRACT_STATUS)[keyof typeof CONTRACT_STATUS];
 
 // ===== 房型 =====
 export const ROOM_TYPE = {
-  SINGLE: 'single',   // 單人房
-  DOUBLE: 'double',   // 雙人房
-  SHARED: 'shared',   // 多人房
+  SINGLE: 'SINGLE',   // 單人房
+  DOUBLE: 'DOUBLE',   // 雙人房
+  SHARED: 'SHARED',   // 多人房
 } as const;
 
 export type RoomType = (typeof ROOM_TYPE)[keyof typeof ROOM_TYPE];
 
 // ===== 性別 =====
 export const GENDER = {
-  MALE: 'male',
-  FEMALE: 'female',
+  MALE: 'MALE',
+  FEMALE: 'FEMALE',
 } as const;
 
 export type Gender = (typeof GENDER)[keyof typeof GENDER];
 
 // ===== ADL 評估 =====
 export const ADL_LEVEL = {
-  INDEPENDENT: 'independent',       // 完全自理
-  PARTIAL_ASSIST: 'partial_assist', // 部分協助
-  FULLY_DEPENDENT: 'fully_dependent', // 完全依賴
+  INDEPENDENT: 'INDEPENDENT',       // 完全自理
+  PARTIAL_ASSIST: 'PARTIAL_ASSIST', // 部分協助
+  FULLY_DEPENDENT: 'FULLY_DEPENDENT', // 完全依賴
 } as const;
 
 export type AdlLevel = (typeof ADL_LEVEL)[keyof typeof ADL_LEVEL];
@@ -76,9 +76,9 @@ export type MedicalTag = (typeof MEDICAL_TAGS)[number];
 
 // ===== 管理員角色 =====
 export const USER_ROLE = {
-  ADMIN: 'admin',         // 系統管理員
-  FLOOR_ADMIN: 'floor_admin', // 樓層行政人員
-  NURSE: 'nurse',         // 護理人員
+  ADMIN: 'ADMIN',         // 系統管理員
+  FLOOR_ADMIN: 'FLOOR_ADMIN', // 樓層行政人員
+  NURSE: 'NURSE',         // 護理人員
 } as const;
 
 export type UserRole = (typeof USER_ROLE)[keyof typeof USER_ROLE];

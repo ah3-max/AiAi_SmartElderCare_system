@@ -14,49 +14,30 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   MessageOutlined,
+  SettingOutlined,
 } from '@ant-design/icons';
 import { useAuthStore } from '@/stores/auth';
 
 const { Header, Sider, Content } = Layout;
-
-const menuItems: MenuProps['items'] = [
-  {
-    key: '/admission',
-    icon: <HomeOutlined />,
-    label: '入住預約管理',
-  },
-  {
-    key: '/appointment',
-    icon: <MedicineBoxOutlined />,
-    label: '就診通知管理',
-  },
-  {
-    key: '/visit',
-    icon: <TeamOutlined />,
-    label: '探訪預約管理',
-  },
-  {
-    key: '/contract',
-    icon: <FileProtectOutlined />,
-    label: '合約簽署管理',
-  },
-  {
-    key: '/users',
-    icon: <UserOutlined />,
-    label: '使用者管理',
-  },
-  {
-    key: '/faq',
-    icon: <MessageOutlined />,
-    label: 'LINE 自動回覆管理',
-  },
-];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
   const { user, logout } = useAuthStore();
+
+  const menuItems: MenuProps['items'] = [
+    { key: '/admission', icon: <HomeOutlined />, label: '入住預約管理' },
+    { key: '/appointment', icon: <MedicineBoxOutlined />, label: '就診通知管理' },
+    { key: '/visit', icon: <TeamOutlined />, label: '探訪預約管理' },
+    { key: '/contract', icon: <FileProtectOutlined />, label: '合約簽署管理' },
+    { key: '/users', icon: <UserOutlined />, label: '使用者管理' },
+    { key: '/faq', icon: <MessageOutlined />, label: 'LINE 自動回覆管理' },
+    ...(user?.role === 'ADMIN'
+      ? [{ key: '/settings', icon: <SettingOutlined />, label: '系統設定' }]
+      : []),
+  ];
+
   const {
     token: { colorBgContainer, borderRadiusLG },
   } = theme.useToken();
