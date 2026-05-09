@@ -27,14 +27,19 @@ services:
       JWT_SECRET: "${JWT_SECRET:-change-this-in-production}"
       JWT_EXPIRES_IN: "8h"
       PORT: "3201"
-      ALLOWED_ORIGINS: "http://localhost:3200,http://localhost:3202,http://192.168.0.138:3200,http://192.168.0.138:3202"
+      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-http://localhost:3200,http://localhost:3202}"
       LINE_CHANNEL_ACCESS_TOKEN: "${LINE_CHANNEL_ACCESS_TOKEN:-}"
       LINE_CHANNEL_SECRET: "${LINE_CHANNEL_SECRET:-}"
       LINE_NOTIFY_TOKEN: "${LINE_NOTIFY_TOKEN:-}"
       LIFF_BASE_URL: "${LIFF_BASE_URL:-}"
       ENCRYPTION_KEY: "${ENCRYPTION_KEY:-change-this-in-production}"
       TWCA_API_URL: "${TWCA_API_URL:-}"
-      TWCA_API_KEY: "${TWCA_API_KEY:-}"
+      TWCA_APP_ID: "${TWCA_APP_ID:-}"
+      TWCA_SECRET: "${TWCA_SECRET:-}"
+      TWCA_KYC_CALLBACK_URL: "${TWCA_KYC_CALLBACK_URL:-}"
+      API_BASE_URL: "${API_BASE_URL:-}"
+      CONTRACT_PDF_DIR: "${CONTRACT_PDF_DIR:-uploads/contracts}"
+      CJK_FONT_PATH: "${CJK_FONT_PATH:-/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf}"
     command: node dist/main
     ports:
       - "3201:3201"
@@ -47,9 +52,9 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: "${NEXT_PUBLIC_API_URL:-http://localhost:3201}"
     container_name: careflow_web
-    environment:
-      NEXT_PUBLIC_API_URL: "http://api:3201"
     ports:
       - "3200:3001"
     depends_on:
@@ -69,6 +74,24 @@ services:
     container_name: careflow_liff
     ports:
       - "3202:80"
+    restart: unless-stopped
+
+  tunnel:
+    build:
+      context: .
+      dockerfile: scripts/Dockerfile.tunnel
+    container_name: careflow_tunnel
+    environment:
+      LINE_CHANNEL_ACCESS_TOKEN: "${LINE_CHANNEL_ACCESS_TOKEN:-}"
+      LIFF_CHANNEL_ID: "${LIFF_CHANNEL_ID:-}"
+      LIFF_CHANNEL_SECRET: "${LIFF_CHANNEL_SECRET:-}"
+      LIFF_ID_ADMISSION: "${LIFF_ID_ADMISSION:-}"
+      LIFF_ID_APPOINTMENT: "${LIFF_ID_APPOINTMENT:-}"
+      LIFF_ID_VISIT: "${LIFF_ID_VISIT:-}"
+      LIFF_ID_CONTRACT: "${LIFF_ID_CONTRACT:-}"
+    depends_on:
+      - api
+      - liff
     restart: unless-stopped
 
 volumes:

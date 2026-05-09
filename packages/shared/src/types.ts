@@ -153,6 +153,17 @@ export interface User {
 
 // ===== API 回應 =====
 
+export interface SystemSetting {
+  id: string;
+  key: string;
+  value: string;
+  category: string;
+  label: string;
+  description: string | null;
+  isSensitive: boolean;
+  updatedAt: string;
+}
+
 export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;

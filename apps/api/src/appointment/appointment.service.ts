@@ -10,6 +10,7 @@ import { AppointmentStatus, ResponseSelection } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationService } from '../notification/notification.service';
 import { ConfigService } from '@nestjs/config';
+import { SystemSettingService } from '../system-setting/system-setting.service';
 
 const RESPONSE_LOCK_HOURS = 24;
 const NOTIFICATION_DAYS = [7, 3, 1];
@@ -22,6 +23,7 @@ export class AppointmentService {
     private readonly prisma: PrismaService,
     private readonly notification: NotificationService,
     private readonly config: ConfigService,
+    private readonly systemSetting: SystemSettingService,
   ) {}
 
   // ===== Cron：每日 08:00 掃描就診通知 =====
@@ -82,7 +84,7 @@ export class AppointmentService {
             );
             if (!primaryContact) continue;
 
-            const liffBaseUrl = this.config.get<string>('LIFF_BASE_URL') ?? '';
+            const liffBaseUrl = await this.systemSetting.get('LIFF_BASE_URL');
             const responseUrl = `${liffBaseUrl}/appointment-response?id=${appt.id}&uid=${primaryContact.lineUserId}`;
 
             const msg = this.notification.buildAppointmentReminderMessage({

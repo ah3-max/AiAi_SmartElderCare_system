@@ -17,6 +17,7 @@ import { LineBotModule } from './line-bot/line-bot.module';
 import { CryptoModule } from './common/crypto/crypto.module';
 import { FaqModule } from './faq/faq.module';
 import { ResidentLeaveModule } from './resident-leave/resident-leave.module';
+import { SystemSettingModule } from './system-setting/system-setting.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { ResidentLeaveModule } from './resident-leave/resident-leave.module';
       { name: 'medium', ttl: 60_000, limit: 100 },  // 每分鐘 100 req
     ]),
     PrismaModule,
+    SystemSettingModule,
     NotificationModule,
     CryptoModule,
     AuthModule,

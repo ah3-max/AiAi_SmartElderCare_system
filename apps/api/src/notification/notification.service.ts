@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { messagingApi } from '@line/bot-sdk';
+import { SystemSettingService } from '../system-setting/system-setting.service';
 
 type Message = messagingApi.Message;
 type TextMessage = messagingApi.TextMessage;
@@ -11,7 +12,10 @@ export class NotificationService {
   private readonly logger = new Logger(NotificationService.name);
   private readonly lineClient: messagingApi.MessagingApiClient;
 
-  constructor(private readonly config: ConfigService) {
+  constructor(
+    private readonly config: ConfigService,
+    private readonly systemSetting: SystemSettingService,
+  ) {
     this.lineClient = new messagingApi.MessagingApiClient({
       channelAccessToken: this.config.get<string>('LINE_CHANNEL_ACCESS_TOKEN', ''),
     });
@@ -26,7 +30,7 @@ export class NotificationService {
   }
 
   async notifyAdmin(message: string) {
-    const token = this.config.get<string>('LINE_NOTIFY_TOKEN', '');
+    const token = await this.systemSetting.get('LINE_NOTIFY_TOKEN');
     if (!token) return;
 
     try {

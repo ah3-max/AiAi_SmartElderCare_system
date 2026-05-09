@@ -239,6 +239,40 @@ async function main() {
   }
   console.log(`✅ 已建立 ${faqs.length} 則 FAQ`);
 
+  // 9. 系統設定
+  const settingsDefs = [
+    {
+      key: 'LINE_NOTIFY_TOKEN',
+      category: 'line',
+      label: 'LINE Notify 權杖',
+      description: '用於發送管理員通知的 LINE Notify Token',
+      isSensitive: true,
+    },
+    {
+      key: 'LIFF_BASE_URL',
+      category: 'url',
+      label: 'LIFF 應用基底 URL',
+      description: '例如 https://liff.line.me/your-liff-id',
+      isSensitive: false,
+    },
+    {
+      key: 'API_BASE_URL',
+      category: 'url',
+      label: '後端 API 基底 URL',
+      description: '用於組合 TWCA callback URL 等外部回呼位址',
+      isSensitive: false,
+    },
+  ];
+  for (const def of settingsDefs) {
+    const envValue = process.env[def.key] ?? '';
+    await prisma.systemSetting.upsert({
+      where: { key: def.key },
+      update: {},
+      create: { ...def, value: envValue },
+    });
+  }
+  console.log(`✅ 已建立 ${settingsDefs.length} 項系統設定`);
+
   console.log('\n🎉 種子資料建立完成！');
 }
 

@@ -16,7 +16,7 @@ COPY --from=deps /app/apps/api/node_modules ./apps/api/node_modules
 COPY . .
 WORKDIR /app/apps/api
 RUN [ -f .env ] || touch .env
-RUN npx prisma generate && npm run build
+RUN rm -f tsconfig.build.tsbuildinfo && npx prisma generate && npm run build
 
 # Production
 FROM base AS runner
@@ -27,5 +27,5 @@ COPY --from=builder /app/apps/api/prisma ./prisma
 COPY --from=builder /app/apps/api/.env ./.env
 COPY --from=builder /app/apps/api/package.json ./package.json
 
-EXPOSE 3000
+EXPOSE 3201
 CMD ["node", "dist/main"]

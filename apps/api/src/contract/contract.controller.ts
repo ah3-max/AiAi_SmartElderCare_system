@@ -1,8 +1,8 @@
 import {
-  Controller, Get, Post, Patch, Delete, Body, Param, Query, Req, UseGuards,
+  Controller, Get, Post, Patch, Delete, Body, Param, Query, Req, Res, UseGuards,
 } from '@nestjs/common';
-import type { Request } from 'express';
-import { IsString, IsBoolean, IsOptional, IsInt, IsPositive, MaxLength, IsArray } from 'class-validator';
+import type { Request, Response } from 'express';
+import { IsString, IsBoolean, IsOptional, IsInt, IsPositive, MaxLength } from 'class-validator';
 import { ContractService } from './contract.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -66,6 +66,30 @@ export class ContractPublicController {
       '';
     return this.contractService.submitSignature({ ...dto, signerIp });
   }
+
+  // TWCA KYC：LIFF 請求驗證 URL，接著把使用者導去 TWCA 驗證頁
+  @Get('kyc-init/:token')
+  initKyc(@Param('token') token: string) {
+    return this.contractService.initKyc(token);
+  }
+
+  // TWCA server-side callback：驗證成功後導回 LIFF
+  @Get('twca-callback')
+  async twcaKycCallback(
+    @Query('referenceId') referenceId: string,
+    @Query('resultCode') resultCode: string,
+    @Query('timestamp') timestamp: string,
+    @Query('signature') signature: string,
+    @Res() res: Response,
+  ) {
+    const { returnUrl } = await this.contractService.completeKycFromCallback({
+      referenceId,
+      resultCode,
+      timestamp,
+      signature,
+    });
+    return res.redirect(returnUrl);
+  }
 }
 
 // 後台管理端點
@@ -123,5 +147,13 @@ export class ContractAdminController {
     @Query('pageSize') pageSize?: number,
   ) {
     return this.contractService.findAll({ building, status, search, page, pageSize });
+  }
+
+  @Get(':id/pdf')
+  async downloadPdf(@Param('id') id: string, @Res() res: Response) {
+    const { buffer, filename } = await this.contractService.getPdfBuffer(id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(buffer);
   }
 }

@@ -1,7 +1,7 @@
 import {
   Controller, Get, Post, Patch, Body, Param, Query, UseGuards,
 } from '@nestjs/common';
-import { IsString, IsEnum, IsOptional, IsInt, MinLength } from 'class-validator';
+import { IsString, IsEnum, IsOptional, IsInt, IsBoolean, MinLength } from 'class-validator';
 import { UserRole } from '@prisma/client';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -22,6 +22,7 @@ class UpdateUserDto {
   @IsOptional() @IsEnum(UserRole) role?: UserRole;
   @IsOptional() @IsString() building?: string;
   @IsOptional() @IsInt() floor?: number;
+  @IsOptional() @IsBoolean() isActive?: boolean;
 }
 
 class ResetPasswordDto {

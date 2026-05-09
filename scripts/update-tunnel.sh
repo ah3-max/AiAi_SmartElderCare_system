@@ -111,7 +111,7 @@ else
     -X PUT "https://api.line.me/v2/bot/channel/webhook/endpoint" \
     -H "Authorization: Bearer $LINE_CHANNEL_ACCESS_TOKEN" \
     -H "Content-Type: application/json" \
-    -d "{\"webhookEndpointUrl\": \"$API_URL/webhook\"}")
+    -d "{\"endpoint\": \"$API_URL/webhook\"}")
 
   if [ "$WEBHOOK_RESP" = "200" ]; then
     echo -e "  ${GREEN}✓${NC} Webhook → $API_URL/webhook"

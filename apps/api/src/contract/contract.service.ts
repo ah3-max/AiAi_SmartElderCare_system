@@ -4,22 +4,39 @@ import {
   ForbiddenException,
   BadRequestException,
   GoneException,
+  UnauthorizedException,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationService } from '../notification/notification.service';
 import { ConfigService } from '@nestjs/config';
 import { v4 as uuidv4 } from 'uuid';
+import * as fs from 'fs';
+import * as path from 'path';
+import { TwcaService } from './twca.service';
+import { PdfService } from './pdf.service';
+import { SystemSettingService } from '../system-setting/system-setting.service';
 
 const KYC_MAX_ATTEMPTS = 3;
 
 @Injectable()
 export class ContractService {
+  private readonly pdfDir: string;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly notification: NotificationService,
     private readonly config: ConfigService,
-  ) {}
+    private readonly twca: TwcaService,
+    private readonly pdfService: PdfService,
+    private readonly systemSetting: SystemSettingService,
+  ) {
+    this.pdfDir = path.resolve(
+      config.get<string>('CONTRACT_PDF_DIR', 'uploads/contracts'),
+    );
+    fs.mkdirSync(this.pdfDir, { recursive: true });
+  }
 
   // ===== Cron：每日檢查過期合約 + 到期提醒 =====
   @Cron('0 9 * * *', { timeZone: 'Asia/Taipei' })
@@ -51,7 +68,7 @@ export class ContractService {
     });
 
     for (const tx of expiringSoon) {
-      const liffBase = this.config.get<string>('LIFF_BASE_URL', '');
+      const liffBase = await this.systemSetting.get('LIFF_BASE_URL');
       await this.notification.pushToUser(tx.familyMember.lineUserId, [
         {
           type: 'text',
@@ -132,7 +149,7 @@ export class ContractService {
       },
     });
 
-    const liffBase = this.config.get<string>('LIFF_BASE_URL', '');
+    const liffBase = await this.systemSetting.get('LIFF_BASE_URL');
     const signingUrl = `${liffBase}/contract?token=${token}`;
 
     await this.notification.pushToUser(familyMember.lineUserId, [
@@ -251,15 +268,56 @@ export class ContractService {
     if (tx.status === 'EXPIRED') throw new GoneException('此合約連結已過期');
     if (!tx.kycVerified) throw new ForbiddenException('請先完成身份驗證');
 
-    // 更新簽署資訊（PDF 生成與 TWCA 數位簽章流程待串接）
+    const signedAt = new Date();
+
+    // 生成合約 PDF
+    let pdfBuffer: Buffer;
+    try {
+      pdfBuffer = await this.pdfService.generateContractPdf({
+        transactionId: tx.id,
+        title: tx.contractTemplate.title,
+        version: tx.contractTemplate.version,
+        contentHtml: tx.contractTemplate.contentHtml,
+        residentName: tx.resident.name,
+        residentBuilding: tx.resident.building ?? '',
+        residentFloor: tx.resident.floor ?? '',
+        signerName: tx.signerName,
+        signerIp: params.signerIp,
+        signedAt,
+        signatureData: params.signatureData,
+      });
+    } catch (err) {
+      throw new InternalServerErrorException(`PDF 生成失敗：${(err as Error).message}`);
+    }
+
+    // TWCA 數位簽章 + TSA 時間戳記
+    let signedPdf: Buffer;
+    try {
+      signedPdf = await this.twca.signAndTimestamp(pdfBuffer, {
+        signerName: tx.signerName,
+        transactionId: tx.id,
+        signedAt,
+      });
+    } catch (err) {
+      throw new InternalServerErrorException(`TWCA 簽章失敗：${(err as Error).message}`);
+    }
+
+    // 儲存已簽署 PDF
+    const pdfPath = path.join(this.pdfDir, `${tx.id}.pdf`);
+    try {
+      await fs.promises.writeFile(pdfPath, signedPdf);
+    } catch (err) {
+      throw new InternalServerErrorException(`PDF 儲存失敗：${(err as Error).message}`);
+    }
+
     const updated = await this.prisma.contractTransaction.update({
       where: { token: params.token },
       data: {
         signatureData: params.signatureData,
         signerIp: params.signerIp,
-        signedAt: new Date(),
+        signedAt,
         status: 'COMPLETED',
-        // pdfPath 於 TWCA 串接後更新
+        pdfPath,
       },
     });
 
@@ -317,7 +375,7 @@ export class ContractService {
     });
 
     let sent = 0;
-    const liffBase = this.config.get<string>('LIFF_BASE_URL', '');
+    const liffBase = await this.systemSetting.get('LIFF_BASE_URL');
 
     for (const tx of contracts) {
       await this.notification.pushToUser(tx.familyMember.lineUserId, [
@@ -394,5 +452,86 @@ export class ContractService {
     ]);
 
     return { pending, expiringSoon, completed };
+  }
+
+  // ===== LIFF：取得 TWCA KYC 驗證 URL =====
+  async initKyc(token: string) {
+    const tx = await this.prisma.contractTransaction.findUnique({ where: { token } });
+    if (!tx) throw new NotFoundException('合約連結不存在');
+    if (tx.kycLockedAt) throw new ForbiddenException('驗證失敗次數過多，請洽機構行政人員重啟連結');
+    if (tx.kycVerified) return { alreadyVerified: true };
+    if (tx.status === 'COMPLETED') throw new GoneException('此合約已完成簽署');
+    if (tx.status === 'EXPIRED' || tx.expiresAt < new Date()) {
+      throw new GoneException('此合約連結已過期');
+    }
+
+    const apiBase = await this.systemSetting.get('API_BASE_URL');
+    const liffBase = await this.systemSetting.get('LIFF_BASE_URL');
+
+    const { redirectUrl } = await this.twca.initiateKyc({
+      referenceId: token,
+      signerName: tx.signerName,
+      callbackUrl: `${apiBase}/contracts/twca-callback`,
+      returnUrl: `${liffBase}/contract?token=${token}`,
+    });
+
+    return { redirectUrl };
+  }
+
+  // ===== TWCA server-side callback：KYC 結果驗證 =====
+  async completeKycFromCallback(params: {
+    referenceId: string;
+    resultCode: string;
+    timestamp: string;
+    signature: string;
+  }): Promise<{ success: boolean; returnUrl: string }> {
+    const valid = this.twca.verifyKycCallback(params);
+    if (!valid) throw new UnauthorizedException('TWCA 簽章驗證失敗');
+
+    const token = params.referenceId;
+    const tx = await this.prisma.contractTransaction.findUnique({ where: { token } });
+    if (!tx) throw new NotFoundException('合約連結不存在');
+
+    const kycPassed = params.resultCode === '00';
+    if (!kycPassed) {
+      const attempts = tx.kycAttempts + 1;
+      const locked = attempts >= KYC_MAX_ATTEMPTS;
+      await this.prisma.contractTransaction.update({
+        where: { token },
+        data: { kycAttempts: attempts, kycLockedAt: locked ? new Date() : null },
+      });
+      throw new BadRequestException(
+        locked
+          ? '驗證失敗次數過多，請洽機構行政人員重啟連結'
+          : `身份驗證失敗（${attempts}/${KYC_MAX_ATTEMPTS}次），請重試`,
+      );
+    }
+
+    await this.prisma.contractTransaction.update({
+      where: { token },
+      data: { kycVerified: true, kycAttempts: 0 },
+    });
+
+    const liffBase = await this.systemSetting.get('LIFF_BASE_URL');
+    return { success: true, returnUrl: `${liffBase}/contract?token=${token}` };
+  }
+
+  // ===== 後台管理員：取得已簽署合約 PDF =====
+  async getPdfBuffer(id: string): Promise<{ buffer: Buffer; filename: string }> {
+    const tx = await this.prisma.contractTransaction.findUnique({
+      where: { id },
+      select: { id: true, pdfPath: true, status: true },
+    });
+    if (!tx) throw new NotFoundException('合約不存在');
+    if (!tx.pdfPath) throw new NotFoundException('PDF 尚未生成，合約可能尚未完成簽署');
+
+    let buffer: Buffer;
+    try {
+      buffer = await fs.promises.readFile(tx.pdfPath);
+    } catch {
+      throw new InternalServerErrorException('PDF 檔案讀取失敗，請確認伺服器儲存路徑');
+    }
+
+    return { buffer, filename: `contract-${tx.id}.pdf` };
   }
 }
