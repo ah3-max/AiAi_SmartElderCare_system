@@ -284,6 +284,7 @@ model ContractTemplate {
   id          String   @id @default(cuid())
   title       String
   contentHtml String
+  pdfFilePath String?
   version     String
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
@@ -327,6 +328,7 @@ enum ContractStatus {
   PENDING    // 待簽署
   COMPLETED  // 已完成
   EXPIRED    // 過期
+  REJECTED   // 拒絕電子簽署（改用紙本）
 }
 
 // ===== 長者請假（含急診記錄，用於排除就診通知發送） =====

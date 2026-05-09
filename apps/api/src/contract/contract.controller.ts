@@ -1,6 +1,8 @@
 import {
   Controller, Get, Post, Patch, Delete, Body, Param, Query, Req, Res, UseGuards,
+  UseInterceptors, UploadedFile, BadRequestException,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request, Response } from 'express';
 import { IsString, IsBoolean, IsOptional, IsInt, IsPositive, MaxLength } from 'class-validator';
 import { ContractService } from './contract.service';
@@ -36,6 +38,7 @@ class SubmitSignatureDto {
   @IsString() token: string;
   @IsString() @MaxLength(500000) signatureData: string; // Base64 簽名上限 500KB
   @IsBoolean() agreedToElectronic: boolean;
+  @IsBoolean() agreedToTerms: boolean; // 同意電子簽章使用告知 + 個資蒐集告知
 }
 
 // 公開端點（LIFF 使用）
@@ -73,6 +76,24 @@ export class ContractPublicController {
     return this.contractService.initKyc(token);
   }
 
+  // 家屬下載已簽署合約 PDF 副本（以 Token 驗證身份）
+  @Get('pdf/:token')
+  async downloadPdfByToken(@Param('token') token: string, @Res() res: Response) {
+    const { buffer, filename } = await this.contractService.getPdfByToken(token);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(buffer);
+  }
+
+  // 取得合約範本 PDF（供 LIFF 嵌入顯示）
+  @Get('template-pdf/:templateId')
+  async getTemplatePdf(@Param('templateId') templateId: string, @Res() res: Response) {
+    const { buffer, filename } = await this.contractService.getTemplatePdfBuffer(templateId);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+    res.send(buffer);
+  }
+
   // TWCA server-side callback：驗證成功後導回 LIFF
   @Get('twca-callback')
   async twcaKycCallback(
@@ -106,6 +127,24 @@ export class ContractAdminController {
   @Post('templates')
   createTemplate(@Body() dto: CreateTemplateDto) {
     return this.contractService.createTemplate(dto);
+  }
+
+  @Post('templates/upload')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadTemplate(
+    @UploadedFile() file: Express.Multer.File,
+    @Body('title') title: string,
+    @Body('version') version: string,
+  ) {
+    if (!file) throw new BadRequestException('請上傳檔案');
+    const ext = file.originalname.split('.').pop()?.toLowerCase();
+    if (ext !== 'docx') {
+      throw new BadRequestException('僅支援 Word (.docx) 格式，請將合約存為 .docx 後上傳');
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      throw new BadRequestException('檔案大小不可超過 10MB');
+    }
+    return this.contractService.createTemplateFromFile({ title, version, file });
   }
 
   @Patch('templates/:id')

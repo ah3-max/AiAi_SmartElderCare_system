@@ -14,6 +14,7 @@ import { ConfigService } from '@nestjs/config';
 import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as mammoth from 'mammoth';
 import { TwcaService } from './twca.service';
 import { PdfService } from './pdf.service';
 import { SystemSettingService } from '../system-setting/system-setting.service';
@@ -23,6 +24,7 @@ const KYC_MAX_ATTEMPTS = 3;
 @Injectable()
 export class ContractService {
   private readonly pdfDir: string;
+  private readonly templateDir: string;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -35,7 +37,11 @@ export class ContractService {
     this.pdfDir = path.resolve(
       config.get<string>('CONTRACT_PDF_DIR', 'uploads/contracts'),
     );
+    this.templateDir = path.resolve(
+      config.get<string>('CONTRACT_TEMPLATE_DIR', 'uploads/templates'),
+    );
     fs.mkdirSync(this.pdfDir, { recursive: true });
+    fs.mkdirSync(this.templateDir, { recursive: true });
   }
 
   // ===== Cron：每日檢查過期合約 + 到期提醒 =====
@@ -117,6 +123,49 @@ export class ContractService {
     return this.prisma.contractTemplate.delete({ where: { id } });
   }
 
+  // ===== 後台：上傳 Word 檔案建立合約範本 =====
+  async createTemplateFromFile(params: {
+    title: string;
+    version: string;
+    file: Express.Multer.File;
+  }) {
+    // .docx → mammoth 轉 HTML（LIFF 顯示用）
+    const result = await mammoth.convertToHtml({ buffer: params.file.buffer });
+
+    // 保存原始 docx 備查
+    const docxPath = path.join(this.templateDir, `${uuidv4()}.docx`);
+    await fs.promises.writeFile(docxPath, params.file.buffer);
+
+    return this.prisma.contractTemplate.create({
+      data: {
+        title: params.title,
+        version: params.version,
+        contentHtml: result.value,
+        pdfFilePath: docxPath,
+        isActive: true,
+      },
+    });
+  }
+
+  // ===== 取得合約範本 PDF 檔案（供 LIFF 顯示）=====
+  async getTemplatePdfBuffer(templateId: string): Promise<{ buffer: Buffer; filename: string }> {
+    const template = await this.prisma.contractTemplate.findUnique({
+      where: { id: templateId },
+      select: { id: true, title: true, pdfFilePath: true },
+    });
+    if (!template) throw new NotFoundException('合約範本不存在');
+    if (!template.pdfFilePath) throw new NotFoundException('此範本無 PDF 檔案');
+
+    let buffer: Buffer;
+    try {
+      buffer = await fs.promises.readFile(template.pdfFilePath);
+    } catch {
+      throw new InternalServerErrorException('範本 PDF 讀取失敗');
+    }
+
+    return { buffer, filename: `${template.title}.pdf` };
+  }
+
   // ===== 後台：發送合約簽署通知 =====
   async sendContractNotification(params: {
     contractTemplateId: string;
@@ -175,6 +224,9 @@ export class ContractService {
 
     if (!tx) throw new NotFoundException('合約連結不存在');
     if (tx.status === 'COMPLETED') throw new GoneException('此合約已完成簽署');
+    if (tx.status === 'REJECTED') {
+      throw new GoneException('此合約已選擇紙本簽署，連結已失效');
+    }
     if (tx.status === 'EXPIRED' || tx.expiresAt < new Date()) {
       throw new GoneException('此合約連結已過期，請聯繫機構重新發送');
     }
@@ -192,6 +244,10 @@ export class ContractService {
         title: tx.contractTemplate.title,
         contentHtml: tx.contractTemplate.contentHtml,
         version: tx.contractTemplate.version,
+        hasPdf: !!tx.contractTemplate.pdfFilePath,
+        pdfUrl: tx.contractTemplate.pdfFilePath
+          ? `/contracts/template-pdf/${tx.contractTemplate.id}`
+          : null,
       },
       resident: {
         name: tx.resident.name,
@@ -249,9 +305,13 @@ export class ContractService {
     signatureData: string;
     signerIp: string;
     agreedToElectronic: boolean;
+    agreedToTerms: boolean;
   }) {
     if (!params.agreedToElectronic) {
       throw new BadRequestException('請同意採用電子簽章');
+    }
+    if (!params.agreedToTerms) {
+      throw new BadRequestException('請閱讀並同意電子簽章使用告知及個人資料蒐集告知');
     }
 
     const tx = await this.prisma.contractTransaction.findUnique({
@@ -265,6 +325,7 @@ export class ContractService {
 
     if (!tx) throw new NotFoundException('合約連結不存在');
     if (tx.status === 'COMPLETED') throw new GoneException('此合約已完成簽署');
+    if (tx.status === 'REJECTED') throw new GoneException('此合約已選擇紙本簽署');
     if (tx.status === 'EXPIRED') throw new GoneException('此合約連結已過期');
     if (!tx.kycVerified) throw new ForbiddenException('請先完成身份驗證');
 
@@ -326,7 +387,33 @@ export class ContractService {
       `【合約簽署完成】長者：${tx.resident.name}，簽署家屬：${tx.signerName}，合約：${tx.contractTemplate.title}，簽署時間：${new Date().toLocaleString('zh-TW')}`,
     );
 
-    return { success: true, signedAt: updated.signedAt };
+    // 推播已簽署 PDF 副本連結給家屬
+    const apiBase = await this.systemSetting.get('API_BASE_URL');
+    const pdfDownloadUrl = `${apiBase}/contracts/pdf/${params.token}`;
+
+    const pdfExpiresAt = new Date(signedAt);
+    pdfExpiresAt.setDate(pdfExpiresAt.getDate() + 30);
+
+    await this.notification.pushToUser(tx.familyMember.lineUserId, [
+      {
+        type: 'text',
+        text: [
+          '【合約簽署完成】',
+          `${tx.resident.name} 的「${tx.contractTemplate.title}（${tx.contractTemplate.version}）」合約已完成電子簽署。`,
+          '',
+          `簽署時間：${signedAt.toLocaleString('zh-TW')}`,
+          '',
+          '請點擊以下連結下載您的合約 PDF 副本：',
+          pdfDownloadUrl,
+          `（下載連結有效期限至 ${pdfExpiresAt.toLocaleDateString('zh-TW')}）`,
+          '',
+          '如有任何疑問，請洽愛愛院行政人員',
+          '電話：02-2758-7020',
+        ].join('\n'),
+      },
+    ]);
+
+    return { success: true, signedAt: updated.signedAt, pdfDownloadUrl };
   }
 
   // ===== 後台：合約列表 =====
@@ -424,7 +511,7 @@ export class ContractService {
 
     await this.prisma.contractTransaction.update({
       where: { token },
-      data: { status: 'EXPIRED' },
+      data: { status: 'REJECTED' },
     });
 
     // 通知行政人員
@@ -514,6 +601,34 @@ export class ContractService {
 
     const liffBase = await this.systemSetting.get('LIFF_BASE_URL');
     return { success: true, returnUrl: `${liffBase}/contract?token=${token}` };
+  }
+
+  // ===== 家屬：以 Token 下載已簽署合約 PDF 副本 =====
+  async getPdfByToken(token: string): Promise<{ buffer: Buffer; filename: string }> {
+    const tx = await this.prisma.contractTransaction.findUnique({
+      where: { token },
+      select: { id: true, pdfPath: true, status: true, signerName: true, signedAt: true },
+    });
+    if (!tx) throw new NotFoundException('合約連結不存在');
+    if (tx.status !== 'COMPLETED') throw new BadRequestException('合約尚未完成簽署');
+    if (!tx.pdfPath) throw new NotFoundException('PDF 尚未生成');
+
+    if (tx.signedAt) {
+      const expiresAt = new Date(tx.signedAt);
+      expiresAt.setDate(expiresAt.getDate() + 30);
+      if (new Date() > expiresAt) {
+        throw new GoneException('PDF 下載連結已過期（簽署後 30 天），請洽機構行政人員取得副本');
+      }
+    }
+
+    let buffer: Buffer;
+    try {
+      buffer = await fs.promises.readFile(tx.pdfPath);
+    } catch {
+      throw new InternalServerErrorException('PDF 檔案讀取失敗');
+    }
+
+    return { buffer, filename: `contract-${tx.signerName}-${tx.id}.pdf` };
   }
 
   // ===== 後台管理員：取得已簽署合約 PDF =====

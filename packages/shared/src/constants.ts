@@ -33,6 +33,7 @@ export const CONTRACT_STATUS = {
   PENDING: 'PENDING',      // 待簽署
   COMPLETED: 'COMPLETED',  // 已完成
   EXPIRED: 'EXPIRED',      // 過期
+  REJECTED: 'REJECTED',    // 拒絕電子簽署（改用紙本）
 } as const;
 
 export type ContractStatus = (typeof CONTRACT_STATUS)[keyof typeof CONTRACT_STATUS];

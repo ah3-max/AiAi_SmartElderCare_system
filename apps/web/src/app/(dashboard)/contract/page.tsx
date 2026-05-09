@@ -1,19 +1,23 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   Typography, Table, Card, Row, Col, Statistic, Tag, Select, Space, Spin, message,
-  Button, Input, Tabs, Modal, Tooltip, Form, Popconfirm,
+  Button, Input, Tabs, Modal, Tooltip, Form, Popconfirm, Upload, Divider,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
   FileProtectOutlined, WarningOutlined, CheckCircleOutlined,
   SendOutlined, EyeOutlined, DownloadOutlined, NotificationOutlined,
-  PlusOutlined, EditOutlined, DeleteOutlined,
+  PlusOutlined, EditOutlined, DeleteOutlined, UploadOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
+import dynamic from 'next/dynamic';
 import api from '@/lib/api';
 import { CONTRACT_STATUS } from '@careflow/shared';
+
+const ReactQuill = dynamic(() => import('react-quill-new'), { ssr: false });
+import 'react-quill-new/dist/quill.snow.css';
 
 const { Title } = Typography;
 const { Search } = Input;
@@ -48,6 +52,12 @@ interface StatsData {
 }
 
 function getTrafficLight(status: string, expiresAt: string): { color: string; label: string } {
+  if (status === CONTRACT_STATUS.COMPLETED) {
+    return { color: 'green', label: '已完成' };
+  }
+  if (status === CONTRACT_STATUS.REJECTED) {
+    return { color: 'orange', label: '已拒絕（紙本）' };
+  }
   if (status === CONTRACT_STATUS.EXPIRED || dayjs(expiresAt).isBefore(dayjs())) {
     return { color: 'red', label: '過期' };
   }
@@ -72,6 +82,17 @@ export default function ContractPage() {
     visible: false, editing: null,
   });
   const [tplForm] = Form.useForm();
+  const [uploading, setUploading] = useState(false);
+
+  const quillModules = useMemo(() => ({
+    toolbar: [
+      [{ header: [1, 2, 3, false] }],
+      ['bold', 'italic', 'underline'],
+      [{ list: 'ordered' }, { list: 'bullet' }],
+      [{ align: [] }],
+      ['clean'],
+    ],
+  }), []);
 
   const fetchData = useCallback(async () => {
     try {
@@ -354,6 +375,7 @@ export default function ContractPage() {
                       options={[
                         { label: '待簽署', value: CONTRACT_STATUS.PENDING },
                         { label: '已完成', value: CONTRACT_STATUS.COMPLETED },
+                        { label: '已拒絕（紙本）', value: CONTRACT_STATUS.REJECTED },
                         { label: '過期', value: CONTRACT_STATUS.EXPIRED },
                       ]} />
                     <Search placeholder="搜尋長者/家屬姓名" allowClear style={{ width: 220 }}
@@ -392,8 +414,36 @@ export default function ContractPage() {
               <>
                 <Space style={{ marginBottom: 12 }}>
                   <Button type="primary" icon={<PlusOutlined />} onClick={openCreateTpl}>
-                    新增範本
+                    新增範本（編輯器）
                   </Button>
+                  <Upload
+                    accept=".docx"
+                    showUploadList={false}
+                    beforeUpload={async (file) => {
+                      const title = window.prompt('請輸入合約名稱：');
+                      if (!title) return false;
+                      const version = window.prompt('請輸入版本號（如 V1.0）：') || 'V1.0';
+                      setUploading(true);
+                      try {
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        formData.append('title', title);
+                        formData.append('version', version);
+                        await api.post('/api/admin/contracts/templates/upload', formData);
+                        message.success('Word 檔案已上傳並轉換為合約範本');
+                        fetchData();
+                      } catch {
+                        message.error('上傳失敗');
+                      } finally {
+                        setUploading(false);
+                      }
+                      return false;
+                    }}
+                  >
+                    <Button icon={<UploadOutlined />} loading={uploading}>
+                      上傳 Word 檔
+                    </Button>
+                  </Upload>
                 </Space>
                 <Table<TemplateRow>
                   rowKey="id"
@@ -425,10 +475,12 @@ export default function ContractPage() {
           </Form.Item>
           <Form.Item
             name="contentHtml"
-            label="合約內容（支援 HTML）"
+            label="合約內容"
             rules={[{ required: true, message: '請填寫合約內容' }]}
+            valuePropName="value"
+            getValueFromEvent={(val: string) => val}
           >
-            <Input.TextArea rows={12} placeholder="<h2>合約標題</h2><p>條文內容...</p>" />
+            <ReactQuill theme="snow" modules={quillModules} style={{ minHeight: 250 }} />
           </Form.Item>
         </Form>
       </Modal>
